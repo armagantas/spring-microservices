@@ -3,6 +3,8 @@ package com.armagantas.ecommerce.order;
 import com.armagantas.ecommerce.customer.CustomerClient;
 import com.armagantas.ecommerce.customer.CustomerResponse;
 import com.armagantas.ecommerce.exceptions.BusinessException;
+import com.armagantas.ecommerce.kafka.OrderConfirmation;
+import com.armagantas.ecommerce.kafka.OrderProducer;
 import com.armagantas.ecommerce.orderline.OrderLineRequest;
 import com.armagantas.ecommerce.orderline.OrderLineService;
 import com.armagantas.ecommerce.product.ProductClient;
@@ -19,6 +21,7 @@ public class OrderService {
     private final ProductClient productClient;
     private final OrderMapper orderMapper;
     private final OrderLineService orderLineService;
+    private final OrderProducer orderProducer;
     
     public Integer createOrder(OrderRequest request) {
         // checking customer using openfeign
@@ -26,7 +29,7 @@ public class OrderService {
                 .orElseThrow(() -> new BusinessException("Create have not been created due to customer have not been found."));
         
         // purchase the product from product-microservice we'll use rest template
-        this.productClient.purchaseProducts(request.products());
+        var purchasedProduct = this.productClient.purchaseProducts(request.products());
         
         // persist order
         var order = this.repository.save(orderMapper.toOrder(request));
@@ -47,6 +50,15 @@ public class OrderService {
         
         
         // send the order confirmation to notification-microservice (kafka)
-        return null;
+        orderProducer.sendOrderConfirmation(
+                new OrderConfirmation(
+                        request.reference(),
+                        request.amount(),
+                        request.paymentMethod(),
+                        customer,
+                        purchasedProduct
+                )
+        );
+        return order.getId();
     }   
 }
