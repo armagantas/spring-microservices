@@ -7,6 +7,8 @@ import com.armagantas.ecommerce.kafka.OrderConfirmation;
 import com.armagantas.ecommerce.kafka.OrderProducer;
 import com.armagantas.ecommerce.orderline.OrderLineRequest;
 import com.armagantas.ecommerce.orderline.OrderLineService;
+import com.armagantas.ecommerce.payment.PaymentClient;
+import com.armagantas.ecommerce.payment.PaymentRequest;
 import com.armagantas.ecommerce.product.ProductClient;
 import com.armagantas.ecommerce.product.PurchaseRequest;
 import jakarta.persistence.EntityNotFoundException;
@@ -26,7 +28,8 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderLineService orderLineService;
     private final OrderProducer orderProducer;
-    
+    private final PaymentClient paymentClient;
+
     public Integer createOrder(OrderRequest request) {
         // checking customer using openfeign
         var customer = this.customerClient.findCustomerById(request.customerId())
@@ -51,6 +54,14 @@ public class OrderService {
         }
         
         // start payment process
+        var paymentRequest = new PaymentRequest(
+          request.amount(),
+          request.paymentMethod(),
+                order.getId(),
+                order.getReference(),
+                customer
+        );
+        paymentClient.requestOrderPayment(paymentRequest);
         
         
         // send the order confirmation to notification-microservice (kafka)
